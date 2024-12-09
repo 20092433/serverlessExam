@@ -50,6 +50,24 @@ export class RestAPIStack extends cdk.Stack {
     });
 
     // Functions
+
+    const getAllMoviesFn = new lambdanode.NodejsFunction(
+      this,
+      "GetAllMoviesFn",
+      {
+        architecture: lambda.Architecture.ARM_64,
+        runtime: lambda.Runtime.NODEJS_18_X,
+        entry: `${__dirname}/../lambdas/getAllMovies.ts`,
+        timeout: cdk.Duration.seconds(10),
+        memorySize: 128,
+        environment: {
+          TABLE_NAME: moviesTable.tableName,
+          REGION: 'eu-west-1',
+        },
+      }
+      );
+
+
     const getMovieByIdFn = new lambdanode.NodejsFunction(
       this,
       "GetMovieByIdFn",
@@ -99,6 +117,24 @@ export class RestAPIStack extends cdk.Stack {
       }
     );
 
+    const getMovieAwardBodyByIdFn = new lambdanode.NodejsFunction(
+      this,
+      "getMovieAwardBodyByIdFn",
+      {
+        architecture: lambda.Architecture.ARM_64,
+        runtime: lambda.Runtime.NODEJS_18_X,
+        entry: `${__dirname}/../lambdas/getMovieAwardBodyById.ts`,
+        timeout: cdk.Duration.seconds(10),
+        memorySize: 128,
+        environment: {
+          TABLE_NAME: movieAwardsTable.tableName,
+          REGION: "eu-west-1",
+        },
+      }
+    );
+
+
+
     new custom.AwsCustomResource(this, "moviesddbInitData", {
       onCreate: {
         service: "DynamoDB",
@@ -138,14 +174,38 @@ export class RestAPIStack extends cdk.Stack {
       },
     });
 
-    const moviesEndpoint = api.root.addResource("movies");
+    //const moviesEndpoint = m.addResource("movies");
 
-    const movieEndpoint = moviesEndpoint.addResource("{movieId}");
+   
 
+    const awardsEndpoint = api.root.addResource("awards");
+
+    const awardEndpoint = awardsEndpoint.addResource("awardBody");
+    awardEndpoint.addMethod(
+      "GET",
+      new apig.LambdaIntegration(getMovieAwardBodyByIdFn, { proxy: true })
+    );
+
+    const movieEndpoint = awardsEndpoint.addResource("movies");
     movieEndpoint.addMethod(
+      "GET",
+      new apig.LambdaIntegration(getAllMoviesFn, { proxy: true })
+    );
+
+
+    const movieIdEndpoint = awardsEndpoint.addResource("{movieId}");
+    
+    movieIdEndpoint.addMethod(
       "GET",
       new apig.LambdaIntegration(getMovieByIdFn, { proxy: true })
     );
+
+   
+
+    
+
+    
+    
 
     const movieCastEndpoint = movieEndpoint.addResource("cast");
     movieCastEndpoint.addMethod(
@@ -159,9 +219,11 @@ export class RestAPIStack extends cdk.Stack {
     );
 
     // Permissions;
+    moviesTable.grantReadData(getAllMoviesFn);
     moviesTable.grantReadData(getMovieByIdFn);
     moviesTable.grantReadWriteData(deleteMovieByIdFn);
     movieCastsTable.grantReadData(getMovieCastMembersFn);
     movieCastsTable.grantReadData(getMovieByIdFn);
+    movieAwardsTable.grantReadData(getMovieAwardBodyByIdFn)
   }
 }
